@@ -6,15 +6,19 @@ A local AI-powered code review assistant that runs entirely on your machine — 
 
 Built with **Ollama** (local LLM inference) + **FastAPI** (REST API) + **llama3.2:3b**.
 
+**Phase 1** — plain-text review, latency benchmarking ✅
+**Phase 2** — structured JSON output, Pydantic validation, retry logic, temperature experiments ✅
+
 ---
 
 ## Features
 
 - Fully offline — all inference runs locally via Ollama
-- REST API (`POST /review`) accepts code + language + filename
-- Returns plain-text review with CRITICAL / WARNING / INFO severity labels
-- Benchmark suite with `rich` table output measuring tokens/s, TTFT, and total latency
-- Phase 2 (coming): structured JSON output, streaming responses
+- REST API (`POST /review`) accepts code + language + filename + temperature
+- Returns **structured JSON** with typed issues (line number, severity enum), suggestions, and overall severity
+- Automatic retry with a stricter prompt if the model returns invalid JSON
+- Benchmark suite measuring tokens/s, TTFT, and total latency
+- Temperature experiment comparing deterministic (0.0) vs. creative (0.7) outputs
 
 ---
 
@@ -65,6 +69,11 @@ curl -X POST http://localhost:8001/review \
 python -m app.benchmarks
 ```
 
+### Run temperature experiment
+```bash
+python -m app.temperature_experiment
+```
+
 ---
 
 ## Project Structure
@@ -72,16 +81,18 @@ python -m app.benchmarks
 ```
 local-code-reviewer/
 ├── app/
-│   ├── main.py            # FastAPI app — /review, /health endpoints
-│   ├── ollama_client.py   # Ollama REST client with TTFT + tok/s metrics
-│   ├── schemas.py         # Pydantic request/response models
-│   └── benchmarks.py      # Benchmark runner with rich table output
+│   ├── main.py                  # FastAPI app — /review, /health endpoints
+│   ├── ollama_client.py         # Ollama REST client with metrics + retry support
+│   ├── schemas.py               # Pydantic models (CodeIssue, Severity enum, etc.)
+│   ├── benchmarks.py            # Benchmark runner with rich table output
+│   └── temperature_experiment.py# Temp=0 vs temp=0.7 comparison runner
 ├── prompts/
-│   └── code_review.txt    # Prompt template (language, filename, code)
+│   └── code_review.txt          # JSON-schema prompt template
 ├── tests/
-│   └── sample_code.py     # 3 buggy functions for manual testing
+│   └── sample_code.py           # 3 buggy functions for manual testing
 ├── results/
-│   └── phase1_benchmarks.md
+│   ├── phase1_benchmarks.md
+│   └── temperature_experiment.json  # saved after running the experiment
 ├── requirements.txt
 └── .env.example
 ```
@@ -107,6 +118,59 @@ local-code-reviewer/
 
 ---
 
+## Phase 2 — Structured Output & Retry Logic
+
+### Response Schema
+
+Every `/review` response is validated against this Pydantic model:
+
+```json
+{
+  "summary": "One-sentence description of overall code quality",
+  "issues": [
+    {
+      "line_number": 7,
+      "severity": "critical",
+      "description": "Division by zero when numbers list is empty"
+    }
+  ],
+  "suggestions": [
+    "Add a guard: if not numbers: return 0.0"
+  ],
+  "overall_severity": "critical",
+  "metrics": {
+    "tokens_per_second": 7.0,
+    "time_to_first_token_ms": 12345.0,
+    "total_latency_ms": 77000.0
+  },
+  "model": "llama3.2:3b",
+  "attempt": 1
+}
+```
+
+**Severity enum:** `low` · `medium` · `high` · `critical`
+
+### Retry Mechanism
+
+1. **Attempt 1** — standard prompt with JSON schema instructions, `temperature=0` by default
+2. **Attempt 2** — if Pydantic validation fails, retries with an appended strict instruction: *"You must respond with ONLY valid JSON, no other text"* + forced `temperature=0`
+3. **Graceful error** — if both attempts fail, returns HTTP 422 with `CodeReviewError` (includes raw response for debugging)
+
+All attempts are logged with `[INFO]` / `[WARNING]` / `[ERROR]` so you can observe retry behavior in the server console.
+
+### Temperature Experiment
+
+```bash
+python -m app.temperature_experiment
+```
+
+Runs the 3 sample snippets at `temperature=0.0` (deterministic) and `temperature=0.7` (creative), then prints:
+- A comparison table: overall severity, issues found, suggestions count, latency
+- A per-snippet diff showing what changed between temperatures
+- Saves full raw JSON output to `results/temperature_experiment.json`
+
+---
+
 ## Metrics Explained
 
 | Metric | Description |
@@ -114,3 +178,4 @@ local-code-reviewer/
 | `tokens_per_second` | Generation speed reported by Ollama (`eval_count / eval_duration`) |
 | `time_to_first_token_ms` | Wall-clock time until the first streamed token arrives |
 | `total_latency_ms` | Wall-clock time for the complete response |
+| `attempt` | `1` = clean first response, `2` = required retry |

@@ -10,10 +10,21 @@ load_dotenv()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
+SYSTEM_PROMPT = (
+    "You are a code review assistant. You ALWAYS respond with ONLY valid JSON. "
+    "Never include markdown, code fences, or any explanation outside the JSON object."
+)
+
+STRICT_RETRY_SUFFIX = (
+    "\n\nCRITICAL: Your previous response was not valid JSON. "
+    "You must respond with ONLY a valid JSON object. "
+    "No markdown. No code fences. No explanation. Raw JSON only."
+)
+
 
 @dataclass
-class OllamaMetrics:
-    review_text: str
+class OllamaResult:
+    raw_text: str
     model: str
     tokens_per_second: float
     time_to_first_token_ms: float
@@ -26,22 +37,27 @@ def load_prompt_template() -> str:
         return f.read()
 
 
-def build_prompt(code: str, language: str, filename: str | None) -> str:
+def build_prompt(code: str, language: str, filename: str | None, strict: bool = False) -> str:
     template = load_prompt_template()
     file_info = f" (file: {filename})" if filename else ""
-    return template.format(language=language, file_info=file_info, code=code)
+    prompt = template.format(language=language, file_info=file_info, code=code)
+    if strict:
+        prompt += STRICT_RETRY_SUFFIX
+    return prompt
 
 
-def review_code(code: str, language: str = "python", filename: str | None = None) -> OllamaMetrics:
-    prompt = build_prompt(code, language, filename)
-
+def _call_ollama(prompt: str, temperature: float = 0.0) -> OllamaResult:
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
+        "system": SYSTEM_PROMPT,
         "stream": True,
+        "options": {
+            "temperature": temperature,
+        },
     }
 
-    full_response = []
+    full_response: list[str] = []
     time_to_first_token_ms = 0.0
     first_token_received = False
     start_time = time.perf_counter()
@@ -71,10 +87,47 @@ def review_code(code: str, language: str = "python", filename: str | None = None
     total_latency_ms = (time.perf_counter() - start_time) * 1000
     tokens_per_second = (eval_count / (eval_duration_ns / 1e9)) if eval_duration_ns > 0 else 0.0
 
-    return OllamaMetrics(
-        review_text="".join(full_response),
+    return OllamaResult(
+        raw_text="".join(full_response),
         model=OLLAMA_MODEL,
         tokens_per_second=round(tokens_per_second, 2),
         time_to_first_token_ms=round(time_to_first_token_ms, 2),
         total_latency_ms=round(total_latency_ms, 2),
     )
+
+
+def extract_json(text: str) -> str:
+    """Strip markdown fences and whitespace, then return the first JSON object found."""
+    text = text.strip()
+    # Remove ```json ... ``` or ``` ... ``` fences the model may emit despite instructions
+    if text.startswith("```"):
+        lines = text.splitlines()
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    # Find the outermost { ... } block
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+    return text
+
+
+def review_code(
+    code: str,
+    language: str = "python",
+    filename: str | None = None,
+    temperature: float = 0.0,
+) -> OllamaResult:
+    prompt = build_prompt(code, language, filename, strict=False)
+    return _call_ollama(prompt, temperature=temperature)
+
+
+def review_code_strict_retry(
+    code: str,
+    language: str = "python",
+    filename: str | None = None,
+    temperature: float = 0.0,
+) -> OllamaResult:
+    """Retry variant that appends the strict JSON-only instruction."""
+    prompt = build_prompt(code, language, filename, strict=True)
+    return _call_ollama(prompt, temperature=temperature)

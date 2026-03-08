@@ -1,17 +1,29 @@
-You are an expert code reviewer. Review the following {language} code{file_info} and provide concise, actionable feedback.
+You are a code review assistant. Analyze the following {language} code{file_info} and respond with ONLY a valid JSON object — no markdown, no explanation, no code fences, just raw JSON.
 
-Focus on:
-1. Bugs and logic errors
-2. Security vulnerabilities
-3. Performance issues
-4. Code style and readability
-5. Edge cases not handled
+The JSON must match this exact schema:
+{{
+  "summary": "one sentence describing the overall code quality",
+  "issues": [
+    {{
+      "line_number": <integer>,
+      "severity": "<low|medium|high|critical>",
+      "description": "<what is wrong and why>"
+    }}
+  ],
+  "suggestions": [
+    "<actionable improvement suggestion>"
+  ],
+  "overall_severity": "<low|medium|high|critical>"
+}}
 
-Be direct. List issues with a severity label (CRITICAL / WARNING / INFO) and suggest a fix for each.
+Rules:
+- severity must be exactly one of: low, medium, high, critical
+- line_number must be an integer (use 0 if not applicable)
+- issues and suggestions must be arrays (can be empty but not omitted)
+- Do NOT wrap the JSON in markdown code blocks
+- Do NOT add any text before or after the JSON
 
 Code to review:
 ```{language}
 {code}
 ```
-
-Review:
