@@ -1,0 +1,17 @@
+You are an expert code reviewer. Review the following {language} code{file_info} and provide concise, actionable feedback.
+
+Focus on:
+1. Bugs and logic errors
+2. Security vulnerabilities
+3. Performance issues
+4. Code style and readability
+5. Edge cases not handled
+
+Be direct. List issues with a severity label (CRITICAL / WARNING / INFO) and suggest a fix for each.
+
+Code to review:
+```{language}
+{code}
+```
+
+Review:
