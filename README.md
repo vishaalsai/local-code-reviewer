@@ -8,6 +8,7 @@ Built with **Ollama** (local LLM inference) + **FastAPI** (REST API) + **llama3.
 
 **Phase 1** — plain-text review, latency benchmarking ✅
 **Phase 2** — structured JSON output, Pydantic validation, retry logic, temperature experiments ✅
+**Phase 3** — 3-model comparison study (llama3.2:3b vs phi3.5:mini vs qwen2.5-coder:3b) 🔄
 
 ---
 
@@ -74,6 +75,11 @@ python -m app.benchmarks
 python -m app.temperature_experiment
 ```
 
+### Run 3-model comparison (Phase 3)
+```bash
+python -m app.model_comparison
+```
+
 ---
 
 ## Project Structure
@@ -85,15 +91,18 @@ local-code-reviewer/
 │   ├── ollama_client.py         # Ollama REST client with metrics + retry support
 │   ├── schemas.py               # Pydantic models (CodeIssue, Severity enum, etc.)
 │   ├── benchmarks.py            # Benchmark runner with rich table output
-│   └── temperature_experiment.py# Temp=0 vs temp=0.7 comparison runner
+│   ├── temperature_experiment.py# Temp=0 vs temp=0.7 comparison runner
+│   └── model_comparison.py      # Phase 3: 3-model comparison with psutil RAM tracking
 ├── prompts/
 │   └── code_review.txt          # JSON-schema prompt template
 ├── tests/
-│   └── sample_code.py           # 3 buggy functions for manual testing
+│   ├── sample_code.py           # 3 buggy functions for manual testing
+│   └── evaluation_prompts.py    # 10-snippet standardized eval set (Phase 3)
 ├── results/
 │   ├── phase1_benchmarks.md
 │   ├── phase2_temperature_experiment.md
-│   └── temperature_experiment.json  # saved after running the experiment
+│   ├── model_comparison_report.md   # Phase 3 technical report
+│   └── temperature_experiment.json  # saved after running (gitignored)
 ├── requirements.txt
 └── .env.example
 ```
@@ -194,6 +203,51 @@ Runs the 3 sample snippets at `temperature=0.0` (deterministic) and `temperature
 3. **Retry mechanism was never triggered.** All 6 requests returned valid JSON on the first attempt, confirming that the combination of a JSON-schema system prompt + explicit formatting rules + `temperature=0` is sufficient for reliable structured output from `llama3.2:3b`.
 
 4. **Production recommendation: use `temperature=0`.** The latency advantage of higher temperature is secondary; determinism and reproducibility matter more for a code review tool. See [`results/phase2_temperature_experiment.md`](results/phase2_temperature_experiment.md) for the full write-up.
+
+---
+
+## Phase 3 — 3-Model Comparison Study
+
+### Models
+
+| Model | Parameters | Specialty |
+|-------|-----------|-----------|
+| `llama3.2:3b` | 3B | General-purpose (Phase 1 & 2 baseline) |
+| `phi3.5:mini` | 3.8B | Reasoning + coding (Microsoft) |
+| `qwen2.5-coder:3b` | 3B | Code-specialized (Alibaba) |
+
+### Evaluation Set (10 snippets)
+
+| ID | Category | Description | Expected |
+|----|----------|-------------|---------|
+| 1–2 | `div` | Division by zero, None dereference | ≥1 issue |
+| 3–4 | `sec` | SQL injection, hardcoded secret | ≥1 issue |
+| 5–6 | `perf` | O(n²) loop, N+1 DB query | ≥1 issue |
+| 7–8 | `anti` | Mutable default arg, bare except | ≥1 issue |
+| 9–10 | `clean` | Correct functions (false-positive control) | 0 issues |
+
+### Metrics Recorded
+
+- `tokens/sec`, `TTFT`, `total latency` — from Ollama's streaming API
+- `RAM usage` — process RSS delta via `psutil`
+- `issues found` per snippet, `false positive rate` on clean snippets
+- `parse failures` — JSON schema compliance per model
+
+### Run the comparison
+
+Pull the two new models first:
+```bash
+ollama pull phi3.5:mini
+ollama pull qwen2.5-coder:3b
+```
+
+Then run:
+```bash
+python -m app.model_comparison
+```
+
+Results are saved to `results/model_comparison.json`.
+See [`results/model_comparison_report.md`](results/model_comparison_report.md) for the full technical report template.
 
 ---
 
