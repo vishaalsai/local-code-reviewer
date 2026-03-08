@@ -92,6 +92,7 @@ local-code-reviewer/
 │   └── sample_code.py           # 3 buggy functions for manual testing
 ├── results/
 │   ├── phase1_benchmarks.md
+│   ├── phase2_temperature_experiment.md
 │   └── temperature_experiment.json  # saved after running the experiment
 ├── requirements.txt
 └── .env.example
@@ -168,6 +169,31 @@ Runs the 3 sample snippets at `temperature=0.0` (deterministic) and `temperature
 - A comparison table: overall severity, issues found, suggestions count, latency
 - A per-snippet diff showing what changed between temperatures
 - Saves full raw JSON output to `results/temperature_experiment.json`
+
+---
+
+## Phase 2 Results
+
+**Hardware:** Intel i5-1155G7 · CPU-only · 8GB RAM · Windows 11
+**Model:** llama3.2:3b · All 6 runs passed Pydantic validation on attempt 1
+
+### Temperature Experiment — Latency Comparison
+
+| Snippet | Latency @ temp=0.0 | Latency @ temp=0.7 | Severity Δ | Issues Δ |
+|---------|-------------------:|-------------------:|:----------:|:--------:|
+| calculate_average | 28,325 ms | 14,028 ms | none | none |
+| append_and_last | 20,033 ms | 17,592 ms | none | none |
+| fetch_user | 23,000 ms | 19,703 ms | none | none |
+
+### Key Findings
+
+1. **Temperature had zero effect on structured output dimensions.** `overall_severity`, issue count, and suggestion count were identical at `temperature=0` and `temperature=0.7` across all 3 snippets. The JSON schema constraint in the system prompt dominates the model's output space — temperature only affects token-level sampling, not schema-constrained semantic content.
+
+2. **temperature=0.7 was consistently faster** (−12% to −50% latency). Higher temperature causes the model to commit to tokens earlier in the sampling distribution, producing slightly shorter responses. This effect is hardware-dependent and not guaranteed to be reproducible.
+
+3. **Retry mechanism was never triggered.** All 6 requests returned valid JSON on the first attempt, confirming that the combination of a JSON-schema system prompt + explicit formatting rules + `temperature=0` is sufficient for reliable structured output from `llama3.2:3b`.
+
+4. **Production recommendation: use `temperature=0`.** The latency advantage of higher temperature is secondary; determinism and reproducibility matter more for a code review tool. See [`results/phase2_temperature_experiment.md`](results/phase2_temperature_experiment.md) for the full write-up.
 
 ---
 
