@@ -26,7 +26,7 @@ All models run in the same process, sequentially, with no GPU acceleration. Resu
 | Model | Parameters | Specialty | Expected Size |
 |-------|-----------|-----------|--------------|
 | `llama3.2:3b` | 3B | General-purpose instruction following | ~2.0 GB |
-| `phi3.5:mini` | 3.8B | Reasoning + coding (Microsoft) | ~2.2 GB |
+| `phi3.5:latest` | 3.8B | Reasoning + coding (Microsoft) | ~2.2 GB |
 | `qwen2.5-coder:3b` | 3B | Code-specialized (Alibaba) | ~1.9 GB |
 
 ---
@@ -40,7 +40,7 @@ All models run in the same process, sequentially, with no GPU acceleration. Resu
 | Model | Avg tok/s | Avg TTFT (ms) | Avg Total Latency (ms) | Avg RAM Δ (MB) | Parse Failures |
 |-------|----------:|--------------:|-----------------------:|---------------:|:--------------:|
 | `llama3.2:3b` | — | — | — | — | — |
-| `phi3.5:mini` | — | — | — | — | — |
+| `phi3.5:latest` | — | — | — | — | — |
 | `qwen2.5-coder:3b` | — | — | — | — | — |
 
 *Phase 1 baseline for `llama3.2:3b`: 7.0 tok/s · 12,701 ms TTFT · 77,507 ms total (Phase 1 used plain-text output; Phase 3 uses JSON schema, expect slightly higher latency)*
@@ -50,14 +50,14 @@ All models run in the same process, sequentially, with no GPU acceleration. Resu
 | Model | Avg Issues Found (buggy) | False Positives / 2 clean | FP Rate |
 |-------|:------------------------:|:-------------------------:|:-------:|
 | `llama3.2:3b` | — | — | — |
-| `phi3.5:mini` | — | — | — |
+| `phi3.5:latest` | — | — | — |
 | `qwen2.5-coder:3b` | — | — | — |
 
 **False positive rate** = number of clean snippets (IDs 9, 10) where the model flagged at least one issue. Lower is better — a model that flags issues in correct code is noisy and untrustworthy.
 
 ### Per-Category Issue Detection
 
-| Category | Description | `llama3.2:3b` | `phi3.5:mini` | `qwen2.5-coder:3b` |
+| Category | Description | `llama3.2:3b` | `phi3.5:latest` | `qwen2.5-coder:3b` |
 |----------|-------------|:-------------:|:-------------:|:------------------:|
 | `div` | Division / null safety (IDs 1–2) | — | — | — |
 | `sec` | Security: SQL injection, hardcoded secrets (IDs 3–4) | — | — | — |
@@ -89,7 +89,7 @@ Low Quality  │  ??              ??
 - Known: 7.0 tok/s on this hardware, 100% schema compliance in Phase 2
 - Trade-off: generalist model, not code-specialized
 
-**`phi3.5:mini`**
+**`phi3.5:latest`**
 - Microsoft's reasoning-focused small model
 - Expected strength: logical reasoning about bugs and null safety
 - Expected weakness: may over-explain, producing longer responses that inflate latency

@@ -8,7 +8,7 @@ Built with **Ollama** (local LLM inference) + **FastAPI** (REST API) + **llama3.
 
 **Phase 1** — plain-text review, latency benchmarking ✅
 **Phase 2** — structured JSON output, Pydantic validation, retry logic, temperature experiments ✅
-**Phase 3** — 3-model comparison study (llama3.2:3b vs phi3.5:mini vs qwen2.5-coder:3b) 🔄
+**Phase 3** — 3-model comparison study (llama3.2:3b vs phi3.5:latest vs qwen2.5-coder:3b) 🔄
 
 ---
 
@@ -213,7 +213,7 @@ Runs the 3 sample snippets at `temperature=0.0` (deterministic) and `temperature
 | Model | Parameters | Specialty |
 |-------|-----------|-----------|
 | `llama3.2:3b` | 3B | General-purpose (Phase 1 & 2 baseline) |
-| `phi3.5:mini` | 3.8B | Reasoning + coding (Microsoft) |
+| `phi3.5:latest` | 3.8B | Reasoning + coding (Microsoft) |
 | `qwen2.5-coder:3b` | 3B | Code-specialized (Alibaba) |
 
 ### Evaluation Set (10 snippets)
@@ -237,7 +237,7 @@ Runs the 3 sample snippets at `temperature=0.0` (deterministic) and `temperature
 
 Pull the two new models first:
 ```bash
-ollama pull phi3.5:mini
+ollama pull phi3.5:latest
 ollama pull qwen2.5-coder:3b
 ```
 

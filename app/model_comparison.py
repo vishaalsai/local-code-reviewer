@@ -3,7 +3,7 @@ Phase 3 — 3-model comparison study.
 
 Runs all 10 evaluation prompts against each of:
   - llama3.2:3b
-  - phi3.5:mini
+  - phi3.5:latest
   - qwen2.5-coder:3b
 
 Records per run: tokens/sec, TTFT, total latency, RAM usage,
@@ -39,7 +39,7 @@ from tests.evaluation_prompts import EVALUATION_PROMPTS
 
 console = Console()
 
-MODELS = ["llama3.2:3b", "phi3.5:mini", "qwen2.5-coder:3b"]
+MODELS = ["llama3.2:3b", "phi3.5:latest", "qwen2.5-coder:3b"]
 CLEAN_IDS = {p["id"] for p in EVALUATION_PROMPTS if p["is_clean"]}
 TOTAL_RUNS = len(MODELS) * len(EVALUATION_PROMPTS)
 
@@ -231,7 +231,7 @@ def _summarise(model: str, runs: list[RunResult]) -> ModelSummary:
 
 # ── Rich output ───────────────────────────────────────────────────────────────
 
-def _print_per_model_table(all_runs: dict[str, list[RunResult]]):
+def _print_per_model_table(all_runs: dict[str, list[RunResult]], models_to_run: list[str]):
     table = Table(
         title="Per-Snippet Results (all models)",
         box=box.SIMPLE_HEAVY,
@@ -240,7 +240,7 @@ def _print_per_model_table(all_runs: dict[str, list[RunResult]]):
     table.add_column("ID", width=3, justify="right", style="dim")
     table.add_column("Category", width=6)
     table.add_column("Label", min_width=30, style="cyan")
-    for model in MODELS:
+    for model in models_to_run:
         short = model.split(":")[0]
         table.add_column(f"{short}\nissues", justify="center", width=8)
         table.add_column(f"{short}\nms", justify="right", width=9)
@@ -248,7 +248,7 @@ def _print_per_model_table(all_runs: dict[str, list[RunResult]]):
     for snippet in EVALUATION_PROMPTS:
         sid = snippet["id"]
         row = [str(sid), snippet["category"], snippet["label"]]
-        for model in MODELS:
+        for model in models_to_run:
             run = next((r for r in all_runs[model] if r.snippet_id == sid), None)
             if run is None:
                 row += ["—", "—"]
@@ -305,15 +305,20 @@ def _print_summary_table(summaries: list[ModelSummary]):
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def run_comparison():
+def run_comparison(models_to_run: list[str] | None = None):
+    if models_to_run is None:
+        models_to_run = MODELS
+
+    total_runs = len(models_to_run) * len(EVALUATION_PROMPTS)
+
     console.print("\n[bold cyan]Phase 3 — Model Comparison Study[/bold cyan]")
     console.print(
-        f"Models: [bold]{', '.join(MODELS)}[/bold]  ·  "
+        f"Models: [bold]{', '.join(models_to_run)}[/bold]  ·  "
         f"Snippets: [bold]{len(EVALUATION_PROMPTS)}[/bold]  ·  "
-        f"Total runs: [bold]{TOTAL_RUNS}[/bold]\n"
+        f"Total runs: [bold]{total_runs}[/bold]\n"
     )
 
-    all_runs: dict[str, list[RunResult]] = {m: [] for m in MODELS}
+    all_runs: dict[str, list[RunResult]] = {m: [] for m in models_to_run}
     run_num = 0
 
     with Progress(
@@ -324,9 +329,9 @@ def run_comparison():
         console=console,
         transient=True,
     ) as progress:
-        overall = progress.add_task("[cyan]Overall progress", total=TOTAL_RUNS)
+        overall = progress.add_task("[cyan]Overall progress", total=total_runs)
 
-        for model in MODELS:
+        for model in models_to_run:
             console.print(f"\n[bold yellow]▶ Running model: {model}[/bold yellow]")
             for snippet in EVALUATION_PROMPTS:
                 run_num += 1
@@ -339,16 +344,16 @@ def run_comparison():
 
     # Print tables
     console.print()
-    _print_per_model_table(all_runs)
+    _print_per_model_table(all_runs, models_to_run)
     console.print()
-    summaries = [_summarise(m, all_runs[m]) for m in MODELS]
+    summaries = [_summarise(m, all_runs[m]) for m in models_to_run]
     _print_summary_table(summaries)
 
     # Save JSON
     output = {
         "experiment_date": datetime.now().isoformat(),
         "hardware": "Intel i5-1155G7, CPU-only, 8GB RAM, Windows 11",
-        "models": MODELS,
+        "models": models_to_run,
         "summaries": [asdict(s) for s in summaries],
         "runs": {
             model: [asdict(r) for r in runs]
@@ -376,4 +381,22 @@ def run_comparison():
 
 
 if __name__ == "__main__":
-    run_comparison()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run model comparison")
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Run only this model (e.g. phi3.5:latest). Omit to run all 3.",
+    )
+    args = parser.parse_args()
+
+    if args.model:
+        if args.model not in MODELS:
+            console.print(f"[red]Unknown model '{args.model}'. Known: {MODELS}[/red]")
+            sys.exit(1)
+        models_to_run = [args.model]
+    else:
+        models_to_run = MODELS
+
+    run_comparison(models_to_run)
